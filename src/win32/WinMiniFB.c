@@ -185,10 +185,10 @@ int mfb_open(const char *title, int width, int height, int scale) {
     // s_bitmapInfo->bmiHeader.biXPelsPerMeter = 14173;
     // s_bitmapInfo->bmiHeader.biYPelsPerMeter = 14173;
     s_bitmapInfo->bmiHeader.biClrUsed = 256;
-    s_bitmapInfo->bmiHeader.biClrImportant = 256;
+    s_bitmapInfo->bmiHeader.biClrImportant = 1;
 
-    RGBQUAD* palette = &s_bitmapInfo->bmiColors[0];
-    /*for (int i = 0; i < 256; ++i)
+    /*RGBQUAD* palette = &s_bitmapInfo->bmiColors[0];
+    for (int i = 0; i < 256; ++i)
     {
         RGBQUAD rgb = {0};
         rgb.rgbRed =  ~i;
