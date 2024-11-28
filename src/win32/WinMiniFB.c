@@ -184,7 +184,7 @@ int mfb_open(const char *title, int width, int height, int scale) {
     s_bitmapInfo->bmiHeader.biSizeImage = 0;
     // s_bitmapInfo->bmiHeader.biXPelsPerMeter = 14173;
     // s_bitmapInfo->bmiHeader.biYPelsPerMeter = 14173;
-    s_bitmapInfo->bmiHeader.biClrUsed = 256;
+    s_bitmapInfo->bmiHeader.biClrUsed = 64;
     s_bitmapInfo->bmiHeader.biClrImportant = 1;
 
     /*RGBQUAD* palette = &s_bitmapInfo->bmiColors[0];
@@ -212,13 +212,13 @@ int mfb_open(const char *title, int width, int height, int scale) {
 void mfb_set_pallete_array(const uint32_t *new_palette, uint8_t start, uint8_t count) {
     uint32_t *palette = (uint32_t *) &s_bitmapInfo->bmiColors[0];
     for (int i = start; i < start + count; i++) {
-        // palette[i] = new_palette[i - start];
+        palette[i] = new_palette[i - start];
     }
 }
 
 void mfb_set_pallete(const uint8_t color_index, const uint32_t color) {
     uint32_t *palette = (uint32_t *) &s_bitmapInfo->bmiColors[0];
-    palette[color_index] = color;
+    palette[color_index] =  color;
 }
 
 

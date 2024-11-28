@@ -30,18 +30,7 @@ typedef struct __attribute__((packed)) {
 } ines_header_t;
 
 
-// RGB888 palette
-static const uint32_t nes_palette_raw[64] = {
-    0x7C7C7C, 0x0000FC, 0x0000BC, 0x4428BC, 0x940084, 0xA80020, 0xA81000, 0x881400, 0x503000, 0x007800, 0x006800,
-    0x005800, 0x004058, 0x000000, 0x000000, 0x000000,
-    0xBCBCBC, 0x0078F8, 0x0058F8, 0x6844FC, 0xD800CC, 0xE40058, 0xF83800, 0xE45C10, 0xAC7C00, 0x00B800, 0x00A800,
-    0x00A844, 0x008888, 0x000000, 0x000000, 0x000000,
-    0xF8F8F8, 0x3CBCFC, 0x6888FC, 0x9878F8, 0xF878F8, 0xF85898, 0xF87858, 0xFCA044, 0xF8B800, 0xB8F818, 0x58D854,
-    0x58F898, 0x00E8D8, 0x787878, 0x000000, 0x000000,
-    0xFCFCFC, 0xA4E4FC, 0xB8B8F8, 0xD8B8F8, 0xF8B8F8, 0xF8A4C0, 0xF0D0B0, 0xFCE0A8, 0xF8D878, 0xD8F878, 0xB8F8B8,
-    0xB8F8D8, 0x00FCFC, 0xF8D8F8, 0x000000, 0x000000
 
-};
 
 
 static uint8_t *key_status;
@@ -317,7 +306,7 @@ static void dendy_frame() {
         }
         if (ppu.sprites_enabled) {
             for (uint16_t sprite_index = 0; sprite_index != 256; sprite_index+=4) {
-                const uint8_t sprite_y = OAM[sprite_index + 0] + 1; // Y-coordinate
+                const uint8_t sprite_y = OAM[sprite_index] + 1; // Y-coordinate
 
                 if (scanline < sprite_y || scanline > sprite_y + 8 || sprite_y >= 240) continue;
 
@@ -332,7 +321,7 @@ static void dendy_frame() {
                 const uint8_t flip_vertically = (attributes & 0x80) != 0; // Bit 7
 
                 // Adjust tile index if using 8x16 sprites
-                if (ppu.sprite_height == 16) {
+                if (sprite_height == 16) {
                     tile_index &= 0xFE; // Use even tile index (0, 2, 4, ...)
                 }
                 const uint8_t row = flip_vertically ? 7 - fine_y : fine_y;
@@ -345,8 +334,8 @@ static void dendy_frame() {
                     const uint8_t tile_col = flip_horizontally ? px : 7 - px;
 
                     // Get the 2-bit pixel value from the pattern table
-                    const uint8_t low_bit = tile_low >> tile_col & 0x01;
-                    const uint8_t high_bit = tile_high >> tile_col & 0x01;
+                    const uint8_t low_bit = tile_low >> tile_col & 1;
+                    const uint8_t high_bit = tile_high >> tile_col & 1;
                     const uint8_t pixel_color = high_bit << 1 | low_bit;
 
                     // Skip transparent pixels
@@ -363,8 +352,8 @@ static void dendy_frame() {
                     const uint8_t final_color = palette_index << 2 | pixel_color;
 
                     // Blend sprite with background based on priority
-                    if (!priority || SCREEN[screen_y * 256 + screen_x] == 0) {
-                        SCREEN[screen_y * 256 + screen_x] = final_color;
+                    if (!priority || SCREEN[screen_y * NES_WIDTH + screen_x] == 0) {
+                        SCREEN[screen_y * NES_WIDTH + screen_x] = final_color;
                     }
                 }
             }
@@ -408,10 +397,10 @@ int main(const int argc, char **argv) {
     if (!mfb_open("Dendy", NES_WIDTH, NES_HEIGHT, scale))
         return 1;
 
-    for (uint8_t i = 0; i < 255; ++i) {
-        mfb_set_pallete(i, nes_palette_raw[i & 63]);
-    }
-
+    // for (uint8_t i = 0; i < 255; ++i) {
+        // mfb_set_pallete(i, nes_palette_raw[i & 63]);
+    // }
+mfb_set_pallete_array(nes_palette_raw, 0, 255);
     key_status = (uint8_t *) mfb_keystatus();
 
     // CreateThread(NULL, 0, SoundThread, NULL, 0, NULL);

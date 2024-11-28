@@ -1,5 +1,7 @@
 #include "ppu.h"
 
+#include "win32/MiniFB.h"
+
 enum {
     PPU_CTRL,
     PPU_MASK,
@@ -22,7 +24,7 @@ static uint8_t ppu_latch = 0;
 static uint8_t ppu_read_buffer = 0;
 static uint8_t oam_address = 0;
 
-uint8_t VRAM[2048] = { 0 };
+uint8_t VRAM[16384] = { 0 };
 uint8_t OAM[256] = { 0 };
 uint8_t PALETTE[64] = { 0 };
 
@@ -35,12 +37,12 @@ static inline void vram_write(const uint16_t address, const uint8_t value) {
         debug_log("!!! Writing CHR\n");
     } else if (address < 0x3F00) {
         VRAM[ppu.mirroring ? address & 2047 : address / 2 & 1024 | address % 1024] = value;
-        increment_address();
     } else {
-        // printf("!!! Writing palette %x %x ?\n", address, value);
+        // printf("!!! Writing palette %x %x ?\n", address  - 0x3F00, value);
         PALETTE[address - 0x3F00] = value;
+        mfb_set_pallete(address - 0x3F00, nes_palette_raw[value]);
     }
-
+    increment_address();
 }
 
 
@@ -48,10 +50,10 @@ void ppu_write(const uint16_t address, const uint8_t value) {
     // printf("ppu_write %x %x\n", address, value);
     switch (address & 7) {
         case PPU_CTRL:
-            ppu.nametable = &VRAM[value & 0b111 << 10 & 2047]; // (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+            ppu.nametable = &VRAM[(value & 0b111 << 10)]; // (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
 
-            ppu.scroll_x |= value & 1 << 8;
-            ppu.scroll_y |= value >> 1 & 1 << 8;
+            // ppu.scroll_x |= value & 1 << 8;
+            // ppu.scroll_y |= value >> 1 & 1 << 8;
 
             ppu.address_step = value & BIT_2 ? 32 : 1;
             ppu.sprite_height = value & BIT_5 ? 16 : 8;
@@ -67,9 +69,9 @@ void ppu_write(const uint16_t address, const uint8_t value) {
             break;
         case PPU_SCROLL:
             if (ppu_latch ^= 1) {
-                ppu.scroll_x |= value;
+                ppu.scroll_x = value;
             } else {
-                ppu.scroll_y |= value;
+                ppu.scroll_y = value;
             }
             break;
         case PPU_ADDRESS: // VRAM Address Register
@@ -102,7 +104,7 @@ static inline uint8_t vram_read(const uint16_t address) {
 
     if (address < 0x3F00) {
         const uint8_t result = ppu_read_buffer;
-        ppu_read_buffer = VRAM[ppu.address];
+        ppu_read_buffer = VRAM[ppu.mirroring ? address & 2047 : address / 2 & 1024 | address % 1024];
         increment_address();
         return result;
     }
@@ -119,7 +121,7 @@ uint8_t ppu_read(const uint16_t address) {
             ppu.status &= ~BIT_7;
             return ppu_status;
         case PPU_DATA:
-            return vram_read(ppu.address);
+            return vram_read(address);
         case OAM_DATA:
             return OAM[oam_address];
     }
