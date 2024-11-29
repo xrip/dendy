@@ -39,13 +39,13 @@ static uint8_t *key_status;
 
 void HandleInput(WPARAM wParam, BOOL isKeyDown) {
 }
-uint16_t prg_rom_mosk;
+uint16_t prg_rom_mask;
 void parse_ines_header(ines_header_t *INES) {
     if (memcmp(INES->magic, "NES\x1A", 4) != 0) {
         fprintf(stderr, "Invalid iNES file %s!\n", INES->magic);
         return;
     }
-    prg_rom_mosk = (INES->prg_rom_size * 16 << 10);
+    prg_rom_mask = (INES->prg_rom_size * 16 << 10);
     ppu.chr_rom = &ROM[INES->prg_rom_size * 16 << 10];
     ppu.mirroring = INES->flags6 & 0x01;
     printf("iNES Header Info:\n");
@@ -110,7 +110,7 @@ uint8_t Rd6502(uint16_t address) {
         return 0xFF;
     }
 
-    return ROM[(address - 0x8000) % prg_rom_mosk]; // do a trick with -0x8000 pointer
+    return ROM[(address - 0x8000) % prg_rom_mask]; // do a trick with -0x8000 pointer
 }
 
 void Wr6502(uint16_t address, uint8_t value) {
