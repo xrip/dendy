@@ -15,11 +15,13 @@
 uint8_t RAM[2048] = {0};
 uint8_t ROM[1024 << 10] = {0};
 M6502 cpu;
-
-
 uint8_t SCREEN[NES_WIDTH * NES_HEIGHT + 8] = {0}; // +8 possible sprite overflow
 
-typedef struct __attribute__((packed)) {
+static uint8_t *key_status;
+static uint8_t buttons = 0;
+static uint16_t prg_rom_mask;
+
+typedef struct {
     char magic[4]; // iNES magic string "NES\x1A"
     uint8_t prg_rom_size; // PRG ROM size in 16 KB units
     uint8_t chr_rom_size; // CHR ROM size in 8 KB units
@@ -31,15 +33,12 @@ typedef struct __attribute__((packed)) {
     uint8_t padding[5]; // Padding (should be zero)
 } ines_header_t;
 
-
-
-
-
-static uint8_t *key_status;
+uint8_t Patch6502(register uint8_t Op, register M6502 *R) {
+}
 
 void HandleInput(WPARAM wParam, BOOL isKeyDown) {
 }
-uint16_t prg_rom_mask;
+
 void parse_ines_header(ines_header_t *INES) {
     if (memcmp(INES->magic, "NES\x1A", 4) != 0) {
         fprintf(stderr, "Invalid iNES file %s!\n", INES->magic);
@@ -77,84 +76,49 @@ static inline size_t readfile(const char *pathname, uint8_t *dst) {
     return rom_size;
 }
 
-
-uint8_t buttons = 0;
-
+// Memory read handler for 6502 CPU
 uint8_t Rd6502(uint16_t address) {
-    // printf("R6502: %02x\n", address);
     if (address < 0x2000) {
         return RAM[address & 2047];
     }
-    // PPU
+
     if (address < 0x4000) {
         return ppu_read(address);
     }
 
-    // APU
-    if (address < 0x4017) {
-        switch (address) {
-            case 0x4016: // Gamepad #1
-                const uint8_t bit = buttons & 1;
-                buttons >>= 1;
-                return bit;
-        }
+    if (address == 0x4016) {
+        const uint8_t bit = buttons & 1;
+        buttons >>= 1;
+        return bit;
     }
 
-    if (address < 0x6000) {
-        //Cartridge Expansion Area almost 8K
-        return 0xFF;
+    if (address >= 0x8000) {
+        return ROM[(address - 0x8000) % prg_rom_mask];
     }
 
-    if (address < 0x8000) {
-        // Cartridge SRAM Area 8K
-        return 0xFF;
-    }
-
-    return ROM[(address - 0x8000) % prg_rom_mask]; // do a trick with -0x8000 pointer
+    return 0xFF;
 }
 
+// Memory write handler for 6502 CPU
 void Wr6502(uint16_t address, uint8_t value) {
-    // printf("Wr6502: %04x %02x\n", address, value);
     if (address < 0x2000) {
         RAM[address & 2047] = value;
-        return;
-    }
-
-    if (address < 0x4000) {
-        return ppu_write(address, value);
-    }
-
-    if (address == 0x4014) {
-        const uint16_t source_address = value << 8; // page
-        for (uint8_t i = 0; i < 255; i++) {
-            OAM[i] = RAM[source_address + i];
-        }
-        // todo: add cpu cycles
-        return;
-    }
-
-    if (address == 0x4016 && value) {
-        buttons = 0x0;
-
+    } else if (address < 0x4000) {
+        ppu_write(address, value);
+    } else if (address == 0x4014) {
+        uint16_t source = value << 8;
+        memcpy(OAM, &RAM[source], 256);
+    } else if (address == 0x4016 && value) {
+        buttons = 0;
         if (key_status['Z']) buttons |= BIT_0;
         if (key_status['X']) buttons |= BIT_1;
-
         if (key_status[VK_SPACE]) buttons |= BIT_2;
-
         if (key_status[VK_RETURN]) buttons |= BIT_3;
-
-
         if (key_status[VK_UP]) buttons |= BIT_4;
         if (key_status[VK_DOWN]) buttons |= BIT_5;
-
-        if (key_status[VK_LEFT]) buttons |= BIT_6; //
+        if (key_status[VK_LEFT]) buttons |= BIT_6;
         if (key_status[VK_RIGHT]) buttons |= BIT_7;
-
-        return;
     }
-}
-
-byte Patch6502(register byte Op, register M6502 *R) {
 }
 
 
@@ -239,7 +203,7 @@ static void dendy_frame() {
     scanline++;
 
     if (mfb_update(SCREEN, 60) == -1)
-        exit(1);
+        exit(EXIT_SUCCESS);
 
     ppu.status |= BIT_7; // Set VBLANK
 
@@ -254,30 +218,21 @@ static void dendy_frame() {
 }
 
 int main(const int argc, char **argv) {
-    int scale = 4;
+    const int scale = argc > 2 ? atoi(argv[2]) : 4;
+
     if (!argv[1]) {
         printf("Usage: dendy.exe <rom.bin> [scale_factor]\n");
-        exit(-1);
-    }
-    if (argc > 2) {
-        scale = atoi(argv[2]);
+        return EXIT_FAILURE;
     }
 
-    const char *filename = argv[1];
-    // const size_t len = strlen(filename);
-    readfile(filename, ROM);
+
+    readfile(argv[1], ROM);
 
     if (!mfb_open("Dendy", NES_WIDTH, NES_HEIGHT, scale))
-        return 1;
+        return EXIT_FAILURE;
 
-    // for (uint8_t i = 0; i < 255; ++i) {
-        // mfb_set_pallete(i, nes_palette_raw[i & 63]);
-    // }
-mfb_set_pallete_array(nes_palette_raw, 0, 255);
+    mfb_set_pallete_array(nes_palette_raw, 0, 255);
     key_status = (uint8_t *) mfb_keystatus();
-
-    // CreateThread(NULL, 0, SoundThread, NULL, 0, NULL);
-    // CreateThread(NULL, 0, TicksThread, NULL, 0, NULL);
 
     Reset6502(&cpu);
 
@@ -289,4 +244,6 @@ mfb_set_pallete_array(nes_palette_raw, 0, 255);
     while (1) {
         dendy_frame();
     }
+
+    return EXIT_SUCCESS;
 }
