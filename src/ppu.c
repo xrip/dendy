@@ -28,13 +28,17 @@ uint8_t VRAM[16384] = { 0 };
 uint8_t OAM[256] = { 0 };
 uint8_t PALETTE[64] = { 0 };
 
+uint8_t CHRRAM[8192] = { 0 };
+
 static inline void increment_address() {
     ppu.address = ppu.address + ppu.address_step & 0x3fff;
 }
 
 static inline void vram_write(const uint16_t address, const uint8_t value) {
     if (address < 0x2000) {
-        debug_log("!!! Writing CHR %x %x\n", address, value);
+        ppu.chr_rom = CHRRAM;
+        // debug_log("!!! Writing CHR %x %x\n", address, value);
+        CHRRAM[address] = value;
     } else if (address < 0x3F00) {
         VRAM[ppu.mirroring ? address & 2047 : address / 2 & 1024 | address % 1024] = value;
     } else {

@@ -19,9 +19,11 @@ uint8_t SCREEN[NES_WIDTH * NES_HEIGHT + 8] = {0}; // +8 possible sprite overflow
 
 static uint8_t *key_status;
 static uint8_t buttons = 0;
-static uint16_t prg_rom_mask;
+static uint32_t prg_rom_mask;
 static uint8_t mapper = 0;
 static uint8_t banks_count  = 0;
+static uint8_t * ROM_BANK0 = ROM;
+static uint8_t * ROM_BANK1 = ROM + 0x4000;
 
 typedef struct {
     char magic[4]; // iNES magic string "NES\x1A"
@@ -50,6 +52,15 @@ void parse_ines_header(ines_header_t *INES) {
     ppu.chr_rom = &ROM[INES->prg_rom_size * 16 << 10];
     ppu.mirroring = INES->flags6 & 0x01;
     mapper = INES->flags7 & 0xF0 | INES->flags6 >> 4;
+    banks_count = prg_rom_mask / 0x2000;
+    if (mapper == 0 ) {
+        ROM_BANK1 = ROM;
+    }
+    if (mapper == 2) {
+        banks_count = prg_rom_mask / 0x4000;
+        ROM_BANK1 = &ROM[(banks_count - 1) * 0x4000];
+    }
+
     printf("iNES Header Info:\n");
     printf("PRG ROM Size: %d KB\n", INES->prg_rom_size * 16);
     printf("CHR ROM Size: %d KB\n", INES->chr_rom_size * 8);
@@ -76,7 +87,6 @@ static inline size_t readfile(const char *pathname, uint8_t *dst) {
 
     fread(dst, sizeof(uint8_t), rom_size, file);
     fclose(file);
-    banks_count = rom_size / 0x2000;
     return rom_size;
 }
 
@@ -96,9 +106,13 @@ uint8_t Rd6502(uint16_t address) {
         return bit;
     }
 
-    if (address >= 0x8000) {
-        return ROM[(address - 0x8000) % prg_rom_mask];
+    if (address >= 0x8000 && address < 0xC000) {
+        return ROM_BANK0[(address - 0x8000)];
     }
+    if (address >= 0xC000 && address < 0xFFFF) {
+        return ROM_BANK1[(address - 0xC000)];
+    }
+
 
     return 0xFF;
 }
@@ -124,8 +138,12 @@ void Wr6502(uint16_t address, uint8_t value) {
     }
     if (address >= 0x8000) {
         switch (mapper) {
+            case 2:
+                // debug_log("PRG-ROM0 bank switch %x\n", value % banks_count);
+                ROM_BANK0 = &ROM[(value % banks_count) * 0x4000];
+                break;
             case 3:
-                printf("bank switch %x %i\n",address, value % banks_count) ;
+                // debug_log("CHR-ROM bank switch %x %i\n",address, value % banks_count) ;
                 ppu.chr_rom = &ROM[prg_rom_mask + (value % banks_count) * 0x2000];
             break;
         }
