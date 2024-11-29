@@ -11,7 +11,6 @@
 #include "ppu.h"
 #include "m6502/m6502.h"
 #include "win32/MiniFB.h"
-#include "win32/audio.h"
 
 uint8_t RAM[2048] = {0};
 uint8_t ROM[1024 << 10] = {0};
