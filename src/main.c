@@ -155,176 +155,70 @@ void Wr6502(uint16_t address, uint8_t value) {
 byte Patch6502(register byte Op, register M6502 *R) {
 }
 
-/** /
-static inline void dendy_frame() {
-    uint16_t scanline = 0;
-    uint8_t * screen = SCREEN;
-
-    const uint8_t * bg_tiles = &ROM[prg_rom_size + ppu_bg_pattern_address];
-    const uint8_t * sp_tiles = &ROM[prg_rom_size + ppu_sprite_pattern_address];
-    const uint8_t * nametable = &VRAM[ppu_base_nametable_address];
-    const uint8_t * attribute_table = nametable + 0x3C0;
-
-    for (; scanline < VISIBLE_SCANLINES; scanline++) {
-        Exec6502(&cpu, CPU_CYCLES_PER_SCANLINE);
-
-        const uint8_t row = scanline / TILE_HEIGHT;
-        const uint8_t * tile_index = &nametable[row * 32];
-        const uint8_t attribute_index = row / 4 * 8;
-
-        // background
-        for (uint8_t column = 0; column < 32; ++column) {
-            const uint16_t tile_address = (scanline % 8 + 16 * *tile_index++) ;
-            const uint8_t attribute_byte = attribute_table[attribute_index + column / 4];
-
-            uint8_t block_x = (column / 2) % 2; // 0 = left, 1 = right
-            uint8_t block_y = (row / 2) % 2; // 0 = top, 1 = bottom
-            uint8_t bit_shift = (block_y * 2 + block_x) * 2; // 2 bits per block
-            uint8_t palette_index = (attribute_byte >> bit_shift) & 0x03;
-
-            const uint8_t tile_low = bg_tiles[tile_address];
-            const uint8_t tile_high = bg_tiles[tile_address + 8];
-
-            for (uint8_t tile_x = 0; tile_x < TILE_WIDTH; ++tile_x) {
-                const uint8_t bit = 7 - tile_x;
-                *screen++ = (palette_index << 2) | (tile_high >> bit & 1) << 1 | (tile_low >> bit) & 1;
-
-            }
-
-        }
-
-        for (uint8_t sprite_index = 0; sprite_index < 64; sprite_index++) {
-            uint8_t y = OAM[4 * sprite_index + 0] + ppu_scroll_y;       // Y-coordinate
-            if (scanline < y || scanline > y + 8 || y >= 240) continue;
-
-            uint8_t tile_index = OAM[4 * sprite_index + 1]; // Tile index
-            uint8_t attributes = OAM[4 * sprite_index + 2]; // Attributes
-            uint8_t x = OAM[4 * sprite_index + 3] + ppu_scroll_x;       // X-coordinate
-
-            // Determine the sprite palette and flipping
-            uint8_t palette_index = (attributes & 0x03);       // Bits 0-1
-            uint8_t priority = (attributes & 0x20) != 0;          // Bit 5
-            uint8_t flip_horizontally = (attributes & 0x40) != 0; // Bit 6
-            uint8_t flip_vertically = (attributes & 0x80) != 0;   // Bit 7
-
-            // Adjust tile index if using 8x16 sprites
-            if (ppu_sprite_size == 16) {
-                tile_index &= 0xFE; // Use even tile index (0, 2, 4, ...)
-            }
-
-            // Loop through each pixel in the sprite
-            // for (uint8_t py = 0; py < 8; py++)
-            uint8_t py = scanline % 8;
-                {
-                uint8_t tile_row = flip_vertically ? 7 - py : py;
-
-                uint8_t bitplane_0 = sp_tiles[tile_index * 16 + tile_row];
-                uint8_t bitplane_1 = sp_tiles[tile_index * 16 + tile_row + 8];
-
-                for (uint8_t px = 0; px < 8; px++) {
-                    uint8_t tile_col = flip_horizontally ? px : 7 - px;
-
-                    // Get the 2-bit pixel value from the pattern table
-                    uint8_t low_bit = (bitplane_0 >> tile_col) & 0x01;
-                    uint8_t high_bit = (bitplane_1 >> tile_col) & 0x01;
-                    uint8_t pixel_color = (high_bit << 1) | low_bit;
-
-                    // Skip transparent pixels
-                    if (pixel_color == 0) continue;
-
-                    // Calculate screen position
-                    uint8_t screen_x = x + px - ppu_scroll_x;
-                    uint8_t screen_y = y + py - ppu_scroll_y;
-
-                    // Skip if off-screen
-                    if (screen_x >= 256 || screen_y >= 240) continue;
-
-                    // Combine palette index and pixel color
-                    uint8_t final_color = (palette_index << 2) | pixel_color;
-
-                    // Blend sprite with background based on priority
-                    if (!priority || SCREEN[screen_y * 256 + screen_x] == 0) {
-                        SCREEN[screen_y * 256 + screen_x] = SCREEN[final_color];
-                    }
-                }
-            }
-        }
-
-    }
-    ppu_status_register |= BIT_7;
-    Exec6502(&cpu, CPU_CYCLES_PER_SCANLINE * 2); // 240-242
-
-    scanline += 2;
-
-
-
-    for (; scanline < NTSC_SCANLINES_PER_FRAME; scanline++) {
-        // 243-262
-        if (ppu_nmi_enabled) {
-            Int6502(&cpu, INT_NMI);
-            // printf("NMI\n");
-        }
-
-        Exec6502(&cpu, CPU_CYCLES_PER_SCANLINE);
-    }
-}
-/**/
 
 static void dendy_frame() {
     uint8_t *screen = SCREEN;
     uint16_t scanline = 0;
-    uint8_t sprite_height = ppu.sprite_height;
+    const uint8_t sprite_height = ppu.sprite_height;
 
     ppu.status &= ~BIT_7;
 
     for (scanline = 0; scanline < VISIBLE_SCANLINES; ++scanline) {
-        const uint8_t tile_row = scanline / TILE_HEIGHT;
-        const uint8_t fine_y = scanline & 7;
+        const uint8_t tile_row = (scanline + ppu.scroll_y) / TILE_HEIGHT % 30;
+        const uint8_t fine_y = (scanline + ppu.scroll_y) & 7;
         if (ppu.background_enabled) {
-            const uint8_t *tile_index = &ppu.nametable[tile_row * 32];
+            // Start rendering tiles, adjusted by horizontal scroll
+            const uint8_t tile_offset_x = ppu.scroll_x / TILE_WIDTH; // Coarse scroll X
+
+            const uint8_t *tiles = &ppu.nametable[tile_row * 32];
             const uint8_t *attribute_table = &ppu.nametable[0x03C0 + tile_row / 4 * 8];
 
             for (uint8_t tile_col = 0; tile_col < 32; ++tile_col) {
-                const uint8_t tile_id = *tile_index++;
+                const uint8_t col = (tile_col + tile_offset_x) % 32;
+                const uint8_t tile_id = tiles[col];
 
                 const uint16_t tile_address = fine_y + 16 * tile_id;
                 const uint8_t tile_low = ppu.background[tile_address];
                 const uint8_t tile_high = ppu.background[tile_address + 8];
 
                 // Precompute attribute table access
-                const uint8_t attr_byte = attribute_table[tile_col / 4];
+                const uint8_t attr_byte = attribute_table[col / 4];
 
                 // Precompute quadrant shift
-                const uint8_t quadrant = tile_row % 4 / 2 * 2 + tile_col % 4 / 2;
+                const uint8_t quadrant = tile_row % 4 / 2 * 2 + col % 4 / 2;
                 const uint8_t palette_index = attr_byte >> quadrant * 2 & 0x03;
 
+/**/
                 // Unroll inner loop for TILE_WIDTH (8 pixels)
                 for (uint8_t bit = 7, tile_x = 0; tile_x < TILE_WIDTH; ++tile_x, --bit) {
                     *screen++ = palette_index << 2 | (tile_high >> bit & 1) << 1 | tile_low >> bit & 1;
                 }
+
+
             }
         }
         if (ppu.sprites_enabled) {
             for (uint16_t sprite_index = 0; sprite_index != 256; sprite_index+=4) {
                 const uint8_t sprite_y = OAM[sprite_index] + 1; // Y-coordinate
 
-                if (scanline < sprite_y || scanline > sprite_y + 8 || sprite_y >= 240) continue;
+                if (scanline < sprite_y || scanline > sprite_y + sprite_height - 1 || sprite_y >= 240) continue;
 
                 uint8_t tile_index = OAM[sprite_index + 1]; // Tile index
                 const uint8_t attributes = OAM[sprite_index + 2]; // Attributes
-                unsigned char sprite_x = OAM[sprite_index + 3]; // X-coordinate
+                const uint8_t sprite_x = OAM[sprite_index + 3]; // X-coordinate
 
                 // Determine the sprite palette and flipping
-                const uint8_t palette_index = attributes & 0x03; // Bits 0-1
-                const uint8_t priority = (attributes & 0x20) != 0; // Bit 5
-                const uint8_t flip_horizontally = (attributes & 0x40) != 0; // Bit 6
-                const uint8_t flip_vertically = (attributes & 0x80) != 0; // Bit 7
+                const uint8_t palette_index = attributes & 3; // Bits 0-1
+                const uint8_t priority = attributes & BIT_5;
+                const uint8_t flip_horizontally = attributes & BIT_6;
+                const uint8_t flip_vertically = attributes & BIT_7;
+
 
                 // Adjust tile index if using 8x16 sprites
                 if (sprite_height == 16) {
                     tile_index &= 0xFE; // Use even tile index (0, 2, 4, ...)
                 }
-                const uint8_t row = flip_vertically ? 7 - fine_y : fine_y;
+                const uint8_t row = flip_vertically ? (sprite_height - 1) - fine_y : fine_y;
 
                 const uint16_t tile_address = tile_index * 16 + row;
                 const uint8_t tile_low = ppu.sprites[tile_address];
@@ -368,7 +262,7 @@ static void dendy_frame() {
     if (mfb_update(SCREEN, 60) == -1)
         exit(1);
 
-    ppu.status |= 0x80; // Set VBLANK
+    ppu.status |= BIT_7; // Set VBLANK
 
     for (; scanline < NTSC_SCANLINES_PER_FRAME; ++scanline) {
         Exec6502(&cpu, CPU_CYCLES_PER_SCANLINE);
