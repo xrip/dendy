@@ -52,8 +52,8 @@ void ppu_write(const uint16_t address, const uint8_t value) {
         case PPU_CTRL:
             ppu.nametable = &VRAM[(value & 0b111 << 10)]; // (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
 
-             ppu.scroll_x |= value & 1 << 8;
-             ppu.scroll_y |= (value >> 1 & 1) << 8;
+            ppu.scroll_x |= value & 1 << 8;
+            ppu.scroll_y |= (value >> 1 & 1) << 8;
 
             ppu.address_step = value & BIT_2 ? 32 : 1;
             ppu.sprite_height = value & BIT_5 ? 16 : 8;

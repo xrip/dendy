@@ -20,6 +20,8 @@ uint8_t SCREEN[NES_WIDTH * NES_HEIGHT + 8] = {0}; // +8 possible sprite overflow
 static uint8_t *key_status;
 static uint8_t buttons = 0;
 static uint16_t prg_rom_mask;
+static uint8_t mapper = 0;
+static uint8_t banks_count  = 0;
 
 typedef struct {
     char magic[4]; // iNES magic string "NES\x1A"
@@ -47,10 +49,11 @@ void parse_ines_header(ines_header_t *INES) {
     prg_rom_mask = (INES->prg_rom_size * 16 << 10);
     ppu.chr_rom = &ROM[INES->prg_rom_size * 16 << 10];
     ppu.mirroring = INES->flags6 & 0x01;
+    mapper = INES->flags7 & 0xF0 | INES->flags6 >> 4;
     printf("iNES Header Info:\n");
     printf("PRG ROM Size: %d KB\n", INES->prg_rom_size * 16);
     printf("CHR ROM Size: %d KB\n", INES->chr_rom_size * 8);
-    printf("Mapper: %d\n", ((INES->flags7 & 0xF0) | (INES->flags6 >> 4)));
+    printf("Mapper: %d\n", mapper);
     printf("Mirroring: %s\n", (INES->flags6 & 0x01) ? "Vertical" : "Horizontal");
     printf("Battery-backed Save: %s\n", (INES->flags6 & 0x02) ? "Yes" : "No");
     printf("Trainer Present: %s\n", (INES->flags6 & 0x04) ? "Yes" : "No");
@@ -73,6 +76,7 @@ static inline size_t readfile(const char *pathname, uint8_t *dst) {
 
     fread(dst, sizeof(uint8_t), rom_size, file);
     fclose(file);
+    banks_count = rom_size / 0x2000;
     return rom_size;
 }
 
@@ -117,6 +121,14 @@ void Wr6502(uint16_t address, uint8_t value) {
         if (key_status[VK_DOWN]) buttons |= BIT_5;
         if (key_status[VK_LEFT]) buttons |= BIT_6;
         if (key_status[VK_RIGHT]) buttons |= BIT_7;
+    }
+    if (address >= 0x8000) {
+        switch (mapper) {
+            case 3:
+                printf("bank switch %x %i\n",address, value % banks_count) ;
+                ppu.chr_rom = &ROM[prg_rom_mask + (value % banks_count) * 0x2000];
+            break;
+        }
     }
 }
 

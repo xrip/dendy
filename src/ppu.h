@@ -25,7 +25,8 @@ typedef struct {
     uint16_t scroll_x;
     uint16_t scroll_y;
 
-    uint8_t mirroring; // 1 - vertical ; 0 - horizontal
+    /* 1 - vertical ; 0 - horizontal */
+    uint8_t mirroring;
 
 } PPU;
 
