@@ -106,8 +106,7 @@ void Wr6502(uint16_t address, uint8_t value) {
     } else if (address < 0x4000) {
         ppu_write(address, value);
     } else if (address == 0x4014) {
-        uint16_t source = value << 8;
-        memcpy(OAM, &RAM[source], 256);
+        memcpy(OAM, &RAM[value << 8], 256);
     } else if (address == 0x4016 && value) {
         buttons = 0;
         if (key_status['Z']) buttons |= BIT_0;
